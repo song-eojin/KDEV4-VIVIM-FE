@@ -201,7 +201,7 @@ const AddButton = styled.button.attrs({
   className: 'approval-proposal-add-button'
 })`
   padding: 12px 24px;
-  background: ${props => props.disabled ? '#e2e8f0' : 'linear-gradient(to right, #3b82f6, #2563eb)'};
+  background: ${props => props.disabled ? '#e2e8f0' : 'linear-gradient(to right, #2E7D32, #2E7D32)'};
   border: none;
   border-radius: 6px;
   color: ${props => props.disabled ? '#94a3b8' : 'white'};
@@ -213,7 +213,7 @@ const AddButton = styled.button.attrs({
   width: 100%;
 
   &:hover {
-    background: ${props => props.disabled ? '#e2e8f0' : 'linear-gradient(to right, #2563eb, #1d4ed8)'};
+    background: ${props => props.disabled ? '#e2e8f0' : 'linear-gradient(to right, rgba(46, 125, 50, 0.93), rgba(46, 125, 50, 0.93))'};
   }
 
   &:active {
