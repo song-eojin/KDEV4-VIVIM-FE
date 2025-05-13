@@ -1129,6 +1129,18 @@ const ApprovalProposal = ({
         }, {
           withCredentials: true
         });
+        await axiosInstance.post(
+          API_ENDPOINTS.APPROVAL.CREATE_APPROVER(approvalId),
+          {
+            approverIds: selectedApprovers.map(approver => approver.userId)
+          },
+          {
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }
+        );
       }
 
       alert('승인요청이 성공적으로 생성되었습니다.');
@@ -1147,6 +1159,7 @@ const ApprovalProposal = ({
         navigate('/login');
       } else {
         alert(error.response?.data?.message || '승인요청 생성에 실패했습니다.');
+        alert(error.response?.data?.statusMessage || error.message || '승인요청 생성에 실패했습니다.');
       }
     }
   };
@@ -1315,8 +1328,30 @@ const ApprovalProposal = ({
       const { data } = await axiosInstance.get(API_ENDPOINTS.PROJECT_COMPANIES(projectId));
       const customerCompanies = data.filter(company => company.companyRole === 'CUSTOMER');
       setCompanies(customerCompanies);
+      for (const company of customerCompanies) {
+        try {
+          const response = await axiosInstance.get(API_ENDPOINTS.COMPANY_EMPLOYEES(company.id), {
+            withCredentials: true
+          });
+          
+          // API 응답에서 data 필드의 직원 목록을 가져옴
+          const employees = response.data.data || [];
+          
+          // CUSTOMER 역할을 가진 직원만 필터링
+          const customerEmployees = Array.isArray(employees) 
+            ? employees.filter(emp => emp.companyRole === 'CUSTOMER')
+            : [];
+          
+          setCompanyEmployees(prev => ({
+            ...prev,
+            [company.id]: customerEmployees
+          }));
+        } catch (error) {
+          console.error(`회사 ${company.id}의 직원 목록 조회 실패:`, error);
+        }
+      }
     } catch (err) {
-      console.error(err);
+      console.error('회사 목록 조회 실패:', err);
       alert('회사 목록을 불러오는데 실패했습니다.');
     }
   };
