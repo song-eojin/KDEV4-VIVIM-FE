@@ -337,6 +337,7 @@ const EmployeeList = styled.div`
   background: white;
   padding: 8px 0;
   overflow-y: auto;
+  font-size: 12px;
 `;
 
 const EmployeeItem = styled.div`
@@ -403,6 +404,7 @@ const InputGroup = styled.div`
 
 const Label = styled.label`
   display: block;
+  margin-top: 16px;
   margin-bottom: 8px;
   font-size: 14px;
   font-weight: 500;
@@ -637,7 +639,6 @@ const ActionIcon = styled.button.attrs({
   }
 `;
 
-// 파일 관련 스타일 컴포넌트 추가
 const FileInputContainer = styled.div`
   margin-bottom: 16px;
 
@@ -866,7 +867,7 @@ const ApprovalProposal = ({
   onShowMore
 }) => {
   const navigate = useNavigate();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, token } = useAuth();
   const [proposals, setProposals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -914,23 +915,21 @@ const ApprovalProposal = ({
     const selectedFiles = Array.from(e.target.files);
     console.log('▶ 파일 선택됨:', selectedFiles);
     
-    // 파일 크기 검증
     const oversizedFiles = selectedFiles.filter(file => file.size > MAX_FILE_SIZE);
     
     if (oversizedFiles.length > 0) {
       alert('10MB 이상의 파일은 업로드할 수 없습니다:\n' + 
         oversizedFiles.map(file => `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)}MB)`).join('\n'));
-      e.target.value = ''; // 파일 선택 초기화
+      e.target.value = ''; 
       return;
     }
 
-    // 기존 파일 목록에 새로 선택된 파일들 추가
     setFiles(prevFiles => {
       const newFiles = [...prevFiles, ...selectedFiles];
       console.log('▶ 현재 파일 목록:', newFiles);
       return newFiles;
     });
-    e.target.value = ''; // 파일 선택 초기화
+    e.target.value = ''; 
   };
 
   // 프로젝트 참여 유저 목록 가져오기
@@ -950,7 +949,6 @@ const ApprovalProposal = ({
       if (error.response?.status === 401) {
         console.log('인증이 필요합니다.');
       }
-      // 에러 발생 시 빈 배열로 설정
       setProjectUsers([]);
     }
   };
@@ -983,7 +981,7 @@ const ApprovalProposal = ({
   useEffect(() => {
     if (projectId) {
       fetchProjectUsers();
-      fetchProjectInfo();  // 프로젝트 정보 조회 추가
+      fetchProjectInfo();  
     }
   }, [projectId]);
 
@@ -1057,13 +1055,7 @@ const ApprovalProposal = ({
   const handleAddProposal = async () => {
     console.log('▶ 승인요청 생성 시도 - 사용자 정보:', user);
     console.log('▶ 승인요청 생성 시도 - 프로젝트 정보:', projectInfo);
-    console.log('▶ 승인요청 생성 시도 - 고객사 여부:', isCustomer);
-
-    if (!user) {
-      console.log('▶ 승인요청 생성 실패 - 사용자 정보 없음');
-      navigate('/login');
-      return;
-    }
+    console.log('▶ 승인요청 생성 시도 - 토큰:', token);
 
     if (!newProposal.title.trim() || !newProposal.content.trim()) {
       alert('제목과 내용을 입력해주세요.');
@@ -1071,66 +1063,66 @@ const ApprovalProposal = ({
     }
 
     try {
-      // 1. 승인요청 생성
-      console.log('▶ 승인요청 생성 요청 시작:', {
-        progressId,
-        title: newProposal.title,
-        content: newProposal.content
-      });
+      // 승인요청 생성
+      const { data: approvalResponse } = await axiosInstance.post(
+        API_ENDPOINTS.APPROVAL.CREATE(progressId),
+        {
+          title: newProposal.title,
+          content: newProposal.content
+        },
+        {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-      const { data } = await axiosInstance.post(API_ENDPOINTS.APPROVAL.CREATE(progressId), {
-        title: newProposal.title,
-        content: newProposal.content
-      }, {
-        withCredentials: true
-      });
-
-      const approvalId = data.data;
+      // 성공 응답인 경우 approvalId 추출
+      const approvalId = approvalResponse?.data;
+      if (!approvalId) {
+        throw new Error('승인요청 생성에 실패했습니다: 승인요청 ID를 받지 못했습니다.');
+      }
       console.log('▶ 승인요청 생성됨, ID:', approvalId);
 
-      // 2. 파일 업로드 처리
+      // 파일 업로드 처리
       for (const file of files) {
-        console.log('▶ 파일 업로드 시도:', file.name, file.size, file.type);
-        
         const formData = new FormData();
         formData.append('file', file);
         
-        // FormData 내용 확인
-        console.log('▶ FormData 내용:');
-        for (const [key, value] of formData.entries()) {
-          console.log(key, value);
-        }
-
-        try {
-          const response = await axiosInstance.post(API_ENDPOINTS.APPROVAL.FILES(approvalId), formData, {
-            withCredentials: true
-          });
-          console.log('▶ 파일 업로드 성공:', response.data);
-        } catch (uploadError) {
-          console.error('▶ 파일 업로드 실패:', uploadError.response?.data || uploadError.message);
-          throw uploadError;
-        }
-      }
-
-      // 3. 링크 저장
-      for (const link of links) {
-        await axiosInstance.post(API_ENDPOINTS.APPROVAL.LINKS(approvalId), {
-          title: link.title,
-          url: link.url
-        }, {
-          withCredentials: true
-        });
-      }
-
-      // 4. 승인권자 설정
-      if (selectedApprovers.length > 0) {
-        await axiosInstance.post(API_ENDPOINTS.APPROVAL.CREATE_APPROVER(approvalId), {
-          approverIds: selectedApprovers.map(approver => approver.userId)
-        }, {
-          withCredentials: true
-        });
         await axiosInstance.post(
-          API_ENDPOINTS.APPROVAL.CREATE_APPROVER(approvalId),
+          API_ENDPOINTS.APPROVAL.FILES(approvalId),
+          formData,
+          {
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          }
+        );
+      }
+
+      // 링크 저장
+      for (const link of links) {
+        await axiosInstance.post(
+          API_ENDPOINTS.APPROVAL.LINKS(approvalId),
+          {
+            title: link.title,
+            url: link.url
+          },
+          {
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+      }
+
+      // 승인권자 설정
+      if (selectedApprovers.length > 0) {
+        const { data: approverResponse } = await axiosInstance.post(
+          API_ENDPOINTS.APPROVAL_APPROVER.CREATE_APPROVER(approvalId),
           {
             approverIds: selectedApprovers.map(approver => approver.userId)
           },
@@ -1141,6 +1133,11 @@ const ApprovalProposal = ({
             }
           }
         );
+
+        // API 응답 확인
+        if (approverResponse.statusCode !== 0) {
+          throw new Error(approverResponse.statusMessage || '승인권자 등록에 실패했습니다.');
+        }
       }
 
       alert('승인요청이 성공적으로 생성되었습니다.');
@@ -1156,9 +1153,7 @@ const ApprovalProposal = ({
       console.error('Error creating proposal:', error);
       if (error.response?.status === 403) {
         alert('승인요청을 생성할 권한이 없습니다.');
-        navigate('/login');
       } else {
-        alert(error.response?.data?.message || '승인요청 생성에 실패했습니다.');
         alert(error.response?.data?.statusMessage || error.message || '승인요청 생성에 실패했습니다.');
       }
     }
@@ -1192,7 +1187,6 @@ const ApprovalProposal = ({
       );
       
       if (data.statusCode === 201) {
-        // 파일 업로드 처리
         for (const file of files) {
           const formData = new FormData();
           formData.append('file', file);
@@ -1273,7 +1267,7 @@ const ApprovalProposal = ({
   const handleSendProposal = async (approvalId) => {
     try {
       // 전송 전 승인권자 수 확인
-      const { data: approversData } = await axiosInstance.get(API_ENDPOINTS.APPROVAL.APPROVERS(approvalId), {
+      const { data: approversData } = await axiosInstance.get(API_ENDPOINTS.APPROVAL_APPROVER.APPROVERS(approvalId), {
         withCredentials: true
       });
       
@@ -1326,8 +1320,11 @@ const ApprovalProposal = ({
   const fetchCompanies = async () => {
     try {
       const { data } = await axiosInstance.get(API_ENDPOINTS.PROJECT_COMPANIES(projectId));
+      // CUSTOMER 역할을 가진 회사만 필터링
       const customerCompanies = data.filter(company => company.companyRole === 'CUSTOMER');
       setCompanies(customerCompanies);
+      
+      // 각 회사의 직원 목록 가져오기
       for (const company of customerCompanies) {
         try {
           const response = await axiosInstance.get(API_ENDPOINTS.COMPANY_EMPLOYEES(company.id), {
@@ -1390,11 +1387,6 @@ const ApprovalProposal = ({
 
   useEffect(() => {
     if (authLoading) return;
-    
-    if (!user) {
-      navigate('/login');
-      return;
-    }
   }, [user, authLoading, navigate]);
 
   const handleFilesChange = (newFiles) => {
